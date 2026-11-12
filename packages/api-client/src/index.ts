@@ -1,0 +1,195 @@
+import createClient from "openapi-fetch";
+import type { components, paths } from "./generated";
+export type { components, paths } from "./generated";
+type Schema = components["schemas"];
+export type Track = Schema["TrackResponse"];
+export type DjSet = Schema["SetResponse"];
+export type Collection = Schema["CollectionResponse"];
+export type TrackWrite = Schema["CreateTrackRequest"];
+type GeneratedTrackQuery = NonNullable<
+  paths["/api/v1/tracks"]["get"]["parameters"]["query"]
+>;
+export type TrackQuery = {
+  [K in keyof GeneratedTrackQuery as Uncapitalize<K>]: GeneratedTrackQuery[K];
+};
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public code?: string,
+    public fields?: Record<string, string[]>,
+    public traceId?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+export function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "Your session has expired. Sign in again.";
+    if (error.status === 403)
+      return "You do not have permission to perform this action.";
+    if (error.status === 409)
+      return `${error.message} Reload the latest data before trying again.`;
+    return error.message;
+  }
+  if (error instanceof Error && error.name === "AbortError")
+    return "The request was cancelled or timed out. Refresh before retrying a change.";
+  return "Cannot reach MixPilot. Check your connection and that the API is running.";
+}
+export function shouldRetry(failures: number, error: unknown) {
+  return failures < 2 && (!(error instanceof ApiError) || error.status >= 500);
+}
+
+export function createMixPilotApi(options: {
+  baseUrl: string;
+  getAccessToken?: () => Promise<string | undefined>;
+  fetch?: typeof fetch;
+  timeoutMs?: number;
+  onUnauthorized?: () => void;
+}) {
+  const transport: typeof fetch = async (input, init) => {
+    const request = new Request(input, init);
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (request.signal.aborted) abort();
+    request.signal.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(abort, options.timeoutMs ?? 30000);
+    try {
+      return await (options.fetch ?? fetch)(
+        new Request(request, { signal: controller.signal }),
+      );
+    } finally {
+      clearTimeout(timer);
+      request.signal.removeEventListener("abort", abort);
+    }
+  };
+  const client = createClient<paths>({
+    baseUrl: options.baseUrl.replace(/\/$/, ""),
+    fetch: transport,
+  });
+  client.use({
+    async onRequest({ request }) {
+      const token = await options.getAccessToken?.();
+      if (token) request.headers.set("Authorization", `Bearer ${token}`);
+      request.headers.set("Accept", "application/json");
+      return request;
+    },
+    async onResponse({ response }) {
+      if (response.ok) return response;
+      const problem = (await response
+        .clone()
+        .json()
+        .catch(() => ({}))) as Schema["ApiProblemResponse"];
+      if (response.status === 401) options.onUnauthorized?.();
+      throw new ApiError(
+        response.status,
+        problem.detail ||
+          problem.title ||
+          `Request failed (${response.status}).`,
+        problem.code ?? undefined,
+        problem.errors ?? undefined,
+        problem.traceId ?? undefined,
+      );
+    },
+  });
+  async function read<T>(
+    promise: Promise<{
+      data?: { succeeded?: boolean; data?: T };
+      response: Response;
+    }>,
+  ): Promise<NonNullable<T>> {
+    const result = await promise;
+    if (result.data?.succeeded !== true || result.data.data == null)
+      throw new ApiError(502, "The API returned an unexpected response.");
+    return result.data.data as NonNullable<T>;
+  }
+  const path = (id: string) => ({ path: { id } });
+  return {
+    capabilities: (signal?: AbortSignal) =>
+      read(client.GET("/api/v1/capabilities", { signal })),
+    tracks: (query: TrackQuery = {}, signal?: AbortSignal) =>
+      read(
+        client.GET("/api/v1/tracks", {
+          params: {
+            query: {
+              Search: query.search,
+              Genre: query.genre,
+              MinBpm: query.minBpm,
+              MaxBpm: query.maxBpm,
+              SortBy: query.sortBy,
+              Direction: query.direction,
+              PageNumber: query.pageNumber,
+              PageSize: query.pageSize,
+            },
+          },
+          signal,
+        }),
+      ),
+    track: (id: string, signal?: AbortSignal) =>
+      read(client.GET("/api/v1/tracks/{id}", { params: path(id), signal })),
+    createTrack: (body: Schema["CreateTrackRequest"]) =>
+      read(client.POST("/api/v1/tracks", { body })),
+    updateTrack: (id: string, body: Schema["UpdateTrackRequest"]) =>
+      read(client.PUT("/api/v1/tracks/{id}", { params: path(id), body })),
+    deleteTrack: async (id: string, expectedRevision: number) => {
+      await client.DELETE("/api/v1/tracks/{id}", {
+        params: { ...path(id), query: { expectedRevision } },
+      });
+    },
+    importCsv: (body: Schema["CsvImportRequest"]) =>
+      read(client.POST("/api/v1/imports/csv", { body })),
+    collections: (pageNumber = 1, signal?: AbortSignal) =>
+      read(
+        client.GET("/api/v1/collections", {
+          params: { query: { PageNumber: pageNumber, PageSize: 20 } },
+          signal,
+        }),
+      ),
+    createCollection: (body: Schema["SaveCollectionRequest"]) =>
+      read(client.POST("/api/v1/collections", { body })),
+    updateCollection: (id: string, body: Schema["SaveCollectionRequest"]) =>
+      read(client.PUT("/api/v1/collections/{id}", { params: path(id), body })),
+    sets: (pageNumber = 1, signal?: AbortSignal) =>
+      read(
+        client.GET("/api/v1/sets", {
+          params: { query: { PageNumber: pageNumber, PageSize: 20 } },
+          signal,
+        }),
+      ),
+    set: (id: string, signal?: AbortSignal) =>
+      read(client.GET("/api/v1/sets/{id}", { params: path(id), signal })),
+    generateSet: (body: Schema["GenerateSetRequest"]) =>
+      read(client.POST("/api/v1/sets/generate", { body })),
+    editSet: (id: string, body: Schema["EditSetRequest"]) =>
+      read(client.PUT("/api/v1/sets/{id}/tracks", { params: path(id), body })),
+    regenerateSet: (id: string, body: Schema["RegenerateSetRequest"]) =>
+      read(
+        client.POST("/api/v1/sets/{id}/regenerate", { params: path(id), body }),
+      ),
+    versions: (id: string, signal?: AbortSignal) =>
+      read(
+        client.GET("/api/v1/sets/{id}/versions", { params: path(id), signal }),
+      ),
+    version: (id: string, version: number, signal?: AbortSignal) =>
+      read(
+        client.GET("/api/v1/sets/{id}/versions/{version}", {
+          params: { path: { id, version } },
+          signal,
+        }),
+      ),
+    explain: (id: string, question: string) =>
+      read(
+        client.POST("/api/v1/sets/{id}/explanation", {
+          params: path(id),
+          body: { question },
+        }),
+      ),
+    profile: (signal?: AbortSignal) =>
+      read(client.GET("/api/v1/me/profile", { signal })),
+    saveProfile: (body: Schema["SaveProfileRequest"]) =>
+      read(client.PUT("/api/v1/me/profile", { body })),
+  };
+}
+export type MixPilotApi = ReturnType<typeof createMixPilotApi>;

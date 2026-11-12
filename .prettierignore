@@ -1,0 +1,9 @@
+node_modules
+dist
+.expo
+.tools
+pnpm-lock.yaml
+packages/api-client/src/generated.ts
+packages/api-client/openapi.json
+test-results
+playwright-report

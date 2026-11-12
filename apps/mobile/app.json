@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "MixPilot",
+    "slug": "mixpilot",
+    "scheme": "mixpilot",
+    "version": "0.1.0",
+    "userInterfaceStyle": "dark",
+    "plugins": ["expo-router"],
+    "ios": { "supportsTablet": true },
+    "android": { "package": "com.mixpilot.app" }
+  }
+}
