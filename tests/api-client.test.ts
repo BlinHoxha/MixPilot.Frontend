@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   createMixPilotApi,
+  intentErrorMessage,
+  jobErrorMessage,
   shouldRetry,
 } from "../packages/api-client/src/index";
 const json = (body: unknown, status = 200) =>
@@ -102,5 +104,29 @@ describe("shared API transport", () => {
       fetch: async () => json({ items: [] }),
     });
     await expect(api.tracks()).rejects.toMatchObject({ status: 502 });
+  });
+  it("sends job idempotency keys, reads 202 envelopes, and approves with a revision", async () => {
+    const transport = vi.fn<typeof fetch>(async (input) => {
+      const request = input as Request;
+      if (request.url.endsWith("/set-generation-jobs")) {
+        expect(request.headers.get("Idempotency-Key")).toBe("one-submission-key");
+        expect(await request.json()).toMatchObject({ name: "Evening flow" });
+        return json({ succeeded: true, data: { id: "job-1", status: "queued" } }, 202);
+      }
+      expect(request.url).toContain("/sets/set-1/versions/2/approve");
+      expect(await request.json()).toMatchObject({ expectedRevision: 7 });
+      return json({ succeeded: true, data: { id: "set-1", approvedVersion: 2, status: "approved" } });
+    });
+    const api = createMixPilotApi({ baseUrl: "https://api.example.test", fetch: transport });
+    await expect(api.createSetGenerationJob({ name: "Evening flow", requirements: {
+      durationSeconds: 3600, territory: "HU", excludedTrackIds: [],
+    } }, "one-submission-key")).resolves.toMatchObject({ id: "job-1", status: "queued" });
+    await expect(api.approveSetVersion("set-1", 2, 7)).resolves.toMatchObject({ approvedVersion: 2 });
+  });
+  it("maps known prompt and job codes and includes unknown job codes", () => {
+    expect(intentErrorMessage("prompt_not_interpretable")).toContain("could not be understood");
+    expect(intentErrorMessage("ai_provider_timeout")).toContain("timed out");
+    expect(jobErrorMessage("no_eligible_tracks")).toContain("No eligible tracks");
+    expect(jobErrorMessage("new_failure_code")).toContain("new_failure_code");
   });
 });

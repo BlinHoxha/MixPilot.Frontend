@@ -25,7 +25,8 @@ With Node 22.12+ and pnpm 10.32.1 already installed, use `pnpm install --frozen-
 - Responsive dark workstation based on the supplied template: home, library, set builder, saved sets, playlists and preferences.
 - Library: paginated search, genre filter, sorting, metadata registration/edit/delete, detail view and authorized CSV metadata import. Blank BPM/key/energy values stay unknown.
 - Playlists: create an ordered collection from selected library tracks and view its members.
-- Set builder: structured constraints, generated saved plans, add/remove/reorder tracks, lock/unlock, save revisions, regenerate unlocked tracks, view history, and BPM/key/energy metadata charts.
+- Set builder: structured constraints, capability-gated prompt preview, durable generation jobs with progress and cancellation, saved plans, add/remove/reorder tracks, lock/unlock, save revisions, approve versions, regenerate unlocked tracks, view history, and BPM/key/energy metadata charts.
+- Dashboard: recent set-generation jobs with status and result links.
 - Set explanations through MixPilot's existing Framework-backed endpoint, when advertised by capabilities.
 - Shared generated OpenAPI operations, envelope handling, ProblemDetails including validation fields and trace IDs, cancellation, request timeouts, no automatic mutation retries, and expected-revision writes.
 - Web OIDC code + PKCE integration shell, memory-only access tokens, identity-scoped query caches and cache clearing on session end.
@@ -33,7 +34,7 @@ With Node 22.12+ and pnpm 10.32.1 already installed, use `pnpm install --frozen-
 
 ## What is intentionally pending
 
-Audio upload/playback, waveforms and signal analysis, durable jobs/SignalR, external discovery, DJ export, subscriptions, notifications, richer artwork, favorites and recommendations depend on additional backend capabilities. The app does not simulate them. Set planning is deterministic; the local explanation provider is extractive rather than an LLM.
+Audio upload/playback, waveforms and signal analysis, SignalR, external discovery, DJ export, subscriptions, notifications, richer artwork, favorites and recommendations depend on additional backend capabilities. The app does not simulate them. Set planning is deterministic; the local explanation provider is extractive rather than an LLM. Prompt preview can use the backend's Development-only Ollama option; see the backend README for setup.
 
 Mobile production sign-in, native secure credential storage, mobile editing/quick-save and full native device testing are follow-up work. The native preview is development-only and deliberately blocks release mode until real authentication is integrated. Responsive web is functional separately from the native app.
 

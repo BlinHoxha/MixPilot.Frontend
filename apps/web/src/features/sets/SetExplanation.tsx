@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { useSession } from "../../core/session";
 import { Failure, Field } from "../../components/ui";
+import { useCapabilities } from "./useCapabilities";
 export function SetExplanation({
   id,
   disabled,
@@ -10,14 +11,11 @@ export function SetExplanation({
   id: string;
   disabled: boolean;
 }) {
-  const { api, identity } = useSession();
+  const { api } = useSession();
   const [question, setQuestion] = useState(
     "Explain the musical choices in this set.",
   );
-  const capabilities = useQuery({
-    queryKey: [identity, "capabilities"],
-    queryFn: ({ signal }) => api.capabilities(signal),
-  });
+  const capabilities = useCapabilities();
   const explain = useMutation({ mutationFn: () => api.explain(id, question) });
   if (!capabilities.data?.enabledFeatures?.includes("setExplanations"))
     return null;

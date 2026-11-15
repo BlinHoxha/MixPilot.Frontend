@@ -14,6 +14,7 @@ import {
 } from "../../components/ui";
 import { ApiError } from "@mixpilot/api-client";
 import type { Collection } from "@mixpilot/api-client";
+import { RecentJobs } from "./RecentJobs";
 
 export function DashboardPage() {
   const { api, identity, name } = useSession();
@@ -73,6 +74,7 @@ export function DashboardPage() {
           <p>{sets.data?.totalCount ?? "—"} journeys in the making</p>
         </Link>
       </div>
+      <RecentJobs />
       <div className="section-heading">
         <h2>Recently added</h2>
         <Link to="/library">View library →</Link>

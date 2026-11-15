@@ -63,6 +63,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["Jobs_Search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["Jobs_Get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["Jobs_Cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/profile": {
         parameters: {
             query?: never;
@@ -89,6 +137,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["SetExplanations_Explain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/set-generation-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SetGenerationJobs_Create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/set-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SetIntents_Interpret"];
         delete?: never;
         options?: never;
         head?: never;
@@ -153,6 +233,22 @@ export interface paths {
         get: operations["Sets_Version"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sets/{id}/versions/{version}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["Sets_Approve"];
         delete?: never;
         options?: never;
         head?: never;
@@ -256,6 +352,10 @@ export interface components {
                 [key: string]: string[];
             } | null;
         };
+        ApproveSetVersionRequest: {
+            /** Format: int32 */
+            expectedRevision?: number;
+        };
         CapabilitiesResponse: {
             apiVersion?: string;
             enabledFeatures?: string[];
@@ -309,6 +409,12 @@ export interface components {
             succeeded?: boolean;
             data?: components["schemas"]["CollectionResponsePageResponse"];
             error?: string | null;
+        };
+        CreateSetGenerationJobRequest: {
+            name: string;
+            requirements?: components["schemas"]["SetRequirementsRequest"];
+            prompt?: string | null;
+            territory?: string | null;
         };
         CreateTrackRequest: {
             artist: string;
@@ -444,6 +550,59 @@ export interface components {
             data?: components["schemas"]["SetExplanationResponse"];
             error?: string | null;
         };
+        SetGenerationJobResponse: {
+            /** Format: uuid */
+            id?: string;
+            kind?: string;
+            status?: string;
+            /** Format: int32 */
+            progress?: number;
+            errorCode?: string | null;
+            /** Format: uuid */
+            resultSetId?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            correlationId?: string;
+        };
+        SetGenerationJobResponseCommonResult: {
+            succeeded?: boolean;
+            data?: components["schemas"]["SetGenerationJobResponse"];
+            error?: string | null;
+        };
+        SetGenerationJobResponsePageResponse: {
+            items?: components["schemas"]["SetGenerationJobResponse"][];
+            /** Format: int32 */
+            pageNumber?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int32 */
+            totalCount?: number;
+            /** Format: int32 */
+            readonly totalPages?: number;
+        };
+        SetGenerationJobResponsePageResponseCommonResult: {
+            succeeded?: boolean;
+            data?: components["schemas"]["SetGenerationJobResponsePageResponse"];
+            error?: string | null;
+        };
+        SetIntentRequest: {
+            prompt: string;
+            territory: string;
+        };
+        SetIntentResponse: {
+            requirements?: components["schemas"]["SetRequirementsRequest"];
+            assumptions?: string[];
+            unresolved?: string[];
+            provider?: string;
+            model?: string | null;
+        };
+        SetIntentResponseCommonResult: {
+            succeeded?: boolean;
+            data?: components["schemas"]["SetIntentResponse"];
+            error?: string | null;
+        };
         SetRequirementsRequest: {
             /** Format: int32 */
             durationSeconds?: number;
@@ -474,6 +633,9 @@ export interface components {
             warnings?: string[];
             /** Format: date-time */
             updatedAt?: string;
+            status?: components["schemas"]["SetVersionStatus"];
+            /** Format: int32 */
+            approvedVersion?: number | null;
         };
         SetResponseCommonResult: {
             succeeded?: boolean;
@@ -533,12 +695,17 @@ export interface components {
             version?: number;
             /** Format: date-time */
             createdAt?: string;
+            status?: components["schemas"]["SetVersionStatus"];
+            /** Format: date-time */
+            approvedAt?: string | null;
         };
         SetVersionResponseIReadOnlyListCommonResult: {
             succeeded?: boolean;
             data?: components["schemas"]["SetVersionResponse"][] | null;
             error?: string | null;
         };
+        /** @enum {string} */
+        SetVersionStatus: "draft" | "approved" | "superseded";
         /** @enum {string} */
         SourceType: "myLibrary" | "externalReference" | "licensedCatalog" | "platformOriginal";
         TrackResponse: {
@@ -646,9 +813,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["CapabilitiesResponseCommonResult"];
                     "application/json": components["schemas"]["CapabilitiesResponseCommonResult"];
-                    "text/json": components["schemas"]["CapabilitiesResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -734,9 +899,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["CollectionResponsePageResponseCommonResult"];
                     "application/json": components["schemas"]["CollectionResponsePageResponseCommonResult"];
-                    "text/json": components["schemas"]["CollectionResponsePageResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -807,7 +970,10 @@ export interface operations {
     Collections_Create: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional owner-scoped retry key (1-100 letters, digits, underscores or hyphens). */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -825,9 +991,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["CollectionResponseCommonResult"];
                     "application/json": components["schemas"]["CollectionResponseCommonResult"];
-                    "text/json": components["schemas"]["CollectionResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -912,9 +1076,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["CollectionResponseCommonResult"];
                     "application/json": components["schemas"]["CollectionResponseCommonResult"];
-                    "text/json": components["schemas"]["CollectionResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1005,9 +1167,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["CollectionResponseCommonResult"];
                     "application/json": components["schemas"]["CollectionResponseCommonResult"];
-                    "text/json": components["schemas"]["CollectionResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1163,7 +1323,10 @@ export interface operations {
     Imports_Import: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional owner-scoped retry key (1-100 letters, digits, underscores or hyphens). */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1181,9 +1344,263 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["ImportResponseCommonResult"];
                     "application/json": components["schemas"]["ImportResponseCommonResult"];
-                    "text/json": components["schemas"]["ImportResponseCommonResult"];
+                };
+            };
+            /** @description Request validation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Revision or resource conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Domain constraints not satisfied */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Unexpected server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+        };
+    };
+    Jobs_Search: {
+        parameters: {
+            query?: {
+                PageNumber?: number;
+                PageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetGenerationJobResponsePageResponseCommonResult"];
+                };
+            };
+            /** @description Request validation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Revision or resource conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Domain constraints not satisfied */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Unexpected server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+        };
+    };
+    Jobs_Get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetGenerationJobResponseCommonResult"];
+                };
+            };
+            /** @description Request validation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Revision or resource conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Domain constraints not satisfied */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Unexpected server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+        };
+    };
+    Jobs_Cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetGenerationJobResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1266,9 +1683,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["ProfileResponseCommonResult"];
                     "application/json": components["schemas"]["ProfileResponseCommonResult"];
-                    "text/json": components["schemas"]["ProfileResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1357,9 +1772,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["ProfileResponseCommonResult"];
                     "application/json": components["schemas"]["ProfileResponseCommonResult"];
-                    "text/json": components["schemas"]["ProfileResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1450,9 +1863,197 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["SetExplanationResponseCommonResult"];
                     "application/json": components["schemas"]["SetExplanationResponseCommonResult"];
-                    "text/json": components["schemas"]["SetExplanationResponseCommonResult"];
+                };
+            };
+            /** @description Request validation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Revision or resource conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Domain constraints not satisfied */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Unexpected server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description AI is disabled or its provider is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+        };
+    };
+    SetGenerationJobs_Create: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional owner-scoped retry key (1-100 letters, digits, underscores or hyphens). */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateSetGenerationJobRequest"];
+                "text/json": components["schemas"]["CreateSetGenerationJobRequest"];
+                "application/*+json": components["schemas"]["CreateSetGenerationJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetGenerationJobResponseCommonResult"];
+                };
+            };
+            /** @description Request validation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Revision or resource conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Domain constraints not satisfied */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Unexpected server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+        };
+    };
+    SetIntents_Interpret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetIntentRequest"];
+                "text/json": components["schemas"]["SetIntentRequest"];
+                "application/*+json": components["schemas"]["SetIntentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetIntentResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1547,9 +2148,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["SetSummaryResponsePageResponseCommonResult"];
                     "application/json": components["schemas"]["SetSummaryResponsePageResponseCommonResult"];
-                    "text/json": components["schemas"]["SetSummaryResponsePageResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1634,9 +2233,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["SetResponseCommonResult"];
                     "application/json": components["schemas"]["SetResponseCommonResult"];
-                    "text/json": components["schemas"]["SetResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1721,9 +2318,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["SetVersionResponseIReadOnlyListCommonResult"];
                     "application/json": components["schemas"]["SetVersionResponseIReadOnlyListCommonResult"];
-                    "text/json": components["schemas"]["SetVersionResponseIReadOnlyListCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1809,9 +2404,99 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["SetResponseCommonResult"];
                     "application/json": components["schemas"]["SetResponseCommonResult"];
-                    "text/json": components["schemas"]["SetResponseCommonResult"];
+                };
+            };
+            /** @description Request validation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Resource not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Revision or resource conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Domain constraints not satisfied */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+            /** @description Unexpected server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ApiProblemResponse"];
+                };
+            };
+        };
+    };
+    Sets_Approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApproveSetVersionRequest"];
+                "text/json": components["schemas"]["ApproveSetVersionRequest"];
+                "application/*+json": components["schemas"]["ApproveSetVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1882,7 +2567,10 @@ export interface operations {
     Sets_Generate: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional owner-scoped retry key (1-100 letters, digits, underscores or hyphens). */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1900,9 +2588,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["SetResponseCommonResult"];
                     "application/json": components["schemas"]["SetResponseCommonResult"];
-                    "text/json": components["schemas"]["SetResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -1993,9 +2679,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["SetResponseCommonResult"];
                     "application/json": components["schemas"]["SetResponseCommonResult"];
-                    "text/json": components["schemas"]["SetResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -2086,9 +2770,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["SetResponseCommonResult"];
                     "application/json": components["schemas"]["SetResponseCommonResult"];
-                    "text/json": components["schemas"]["SetResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -2180,9 +2862,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["TrackResponsePageResponseCommonResult"];
                     "application/json": components["schemas"]["TrackResponsePageResponseCommonResult"];
-                    "text/json": components["schemas"]["TrackResponsePageResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -2253,7 +2933,10 @@ export interface operations {
     Tracks_Create: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional owner-scoped retry key (1-100 letters, digits, underscores or hyphens). */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2271,9 +2954,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["TrackResponseCommonResult"];
                     "application/json": components["schemas"]["TrackResponseCommonResult"];
-                    "text/json": components["schemas"]["TrackResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -2358,9 +3039,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["TrackResponseCommonResult"];
                     "application/json": components["schemas"]["TrackResponseCommonResult"];
-                    "text/json": components["schemas"]["TrackResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */
@@ -2451,9 +3130,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "text/plain": components["schemas"]["TrackResponseCommonResult"];
                     "application/json": components["schemas"]["TrackResponseCommonResult"];
-                    "text/json": components["schemas"]["TrackResponseCommonResult"];
                 };
             };
             /** @description Request validation failed */

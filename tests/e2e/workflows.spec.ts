@@ -275,3 +275,108 @@ test("renders a new profile form and contains no viewport overflow", async ({
     ),
   ).toBe(true);
 });
+
+test("prompt preview fills editable fields and a job navigates to its result", async ({ page }) => {
+  const resultId = "33333333-3333-4333-8333-333333333333";
+  let polls = 0;
+  let submitted: Record<string, unknown> | undefined;
+  await page.route("**/api/v1/capabilities", (route) => route.fulfill({ json: {
+    succeeded: true, data: { enabledFeatures: ["personalLibrary", "promptInterpretation", "setGenerationJobs"] },
+  } }));
+  await page.route("**/api/v1/set-intents", (route) => route.fulfill({ json: {
+    succeeded: true, data: { requirements: {
+      durationSeconds: 3600, minBpm: 120, maxBpm: 130, genre: "House", mood: "Late",
+      hasVocals: false, energyCurve: "wave", territory: "HU", mode: "planning", excludedTrackIds: [],
+    }, assumptions: ["Duration inferred"], unresolved: ["sunset"] },
+  } }));
+  await page.route("**/api/v1/set-generation-jobs", (route) => {
+    submitted = route.request().postDataJSON();
+    expect(route.request().headers()["idempotency-key"]).toBeTruthy();
+    return route.fulfill({ status: 202, json: { succeeded: true, data: { id: "job-1", status: "queued", progress: 0 } } });
+  });
+  await page.route("**/api/v1/jobs/job-1", (route) => {
+    polls++;
+    const status = polls === 1 ? "running" : "succeeded";
+    return route.fulfill({ json: { succeeded: true, data: {
+      id: "job-1", status, progress: status === "running" ? 50 : 100,
+      resultSetId: status === "succeeded" ? resultId : null,
+    } } });
+  });
+  await page.goto("/builder");
+  await page.getByLabel("Describe your set").fill("A one hour house set");
+  await page.getByRole("button", { name: "Preview prompt" }).click();
+  await expect(page.getByText("Duration inferred")).toBeVisible();
+  await expect(page.getByText("sunset")).toBeVisible();
+  await expect(page.getByLabel("Genre")).toHaveValue("House");
+  await page.getByLabel("Genre").fill("Deep House");
+  await page.getByRole("button", { name: "Generate set", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/builder/${resultId}$`));
+  expect(submitted).toMatchObject({ name: "Evening flow", requirements: { genre: "Deep House", mood: "Late", hasVocals: false } });
+  expect(polls).toBeGreaterThanOrEqual(2);
+});
+
+test("a failed job shows its code and a running job can be cancelled", async ({ page }) => {
+  await page.route("**/api/v1/capabilities", (route) => route.fulfill({ json: {
+    succeeded: true, data: { enabledFeatures: ["setGenerationJobs"] },
+  } }));
+  let submissions = 0;
+  await page.route("**/api/v1/set-generation-jobs", (route) => {
+    submissions++;
+    return route.fulfill({ status: 202, json: { succeeded: true, data: { id: `job-${submissions}`, status: "queued" } } });
+  });
+  await page.route("**/api/v1/jobs/job-*", (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").at(-1);
+    return route.fulfill({ json: { succeeded: true, data: id === "job-1"
+      ? { id, status: "failed", errorCode: "no_eligible_tracks" }
+      : { id, status: "running", progress: 25 } } });
+  });
+  await page.route("**/api/v1/jobs/job-2/cancel", (route) => route.fulfill({ json: {
+    succeeded: true, data: { id: "job-2", status: "cancelled", progress: 25 },
+  } }));
+  await page.goto("/builder");
+  await expect(page.getByLabel("Describe your set")).toHaveCount(0);
+  await page.getByRole("button", { name: "Generate set", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("No eligible tracks");
+  await page.getByRole("button", { name: "Generate set", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Cancel job" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel job" }).click();
+  await expect(page.getByText("Status: cancelled")).toBeVisible();
+});
+
+test("version approval handles an ineligible track then shows approved status", async ({ page }) => {
+  let attempts = 0;
+  await page.route("**/api/v1/sets/*/versions/*/approve", (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({ expectedRevision: 1 });
+    attempts++;
+    if (attempts === 1) return route.fulfill({ status: 422, json: {
+      code: "track_ineligible", detail: "A track is no longer eligible.",
+    } });
+    return route.fulfill({ json: { succeeded: true, data: {
+      id: "33333333-3333-4333-8333-333333333333", name: "Evening flow", revision: 2,
+      version: 1, status: "approved", approvedVersion: 1, tracks: [],
+      requirements: { durationSeconds: 3600, territory: "HU", excludedTrackIds: [] },
+    } } });
+  });
+  await page.goto("/builder/33333333-3333-4333-8333-333333333333");
+  await page.getByRole("button", { name: "Approve this version" }).click();
+  await expect(page.getByRole("alert")).toContainText("A track is no longer eligible.");
+  await page.getByRole("button", { name: "Approve this version" }).click();
+  await expect(page.getByText("Approved version: 1")).toBeVisible();
+  await expect(page.getByText("approved", { exact: true })).toBeVisible();
+});
+
+test("dashboard shows recent job status and a result link", async ({ page }) => {
+  await page.route("**/api/v1/capabilities", (route) => route.fulfill({ json: {
+    succeeded: true, data: { enabledFeatures: ["setGenerationJobs"] },
+  } }));
+  await page.route("**/api/v1/jobs?*", (route) => route.fulfill({ json: { succeeded: true, data: {
+    items: [{ id: "job-1", status: "succeeded", progress: 100,
+      createdAt: "2026-11-15T10:00:00Z", resultSetId: "33333333-3333-4333-8333-333333333333" }],
+    pageNumber: 1, pageSize: 10, totalCount: 1, totalPages: 1,
+  } } }));
+  await page.goto("/");
+  const panel = page.getByRole("region", { name: "Recent jobs" });
+  await expect(panel).toContainText("succeeded");
+  await expect(panel).toContainText("100%");
+  await expect(panel.getByRole("link", { name: "Open set" })).toHaveAttribute("href", "/builder/33333333-3333-4333-8333-333333333333");
+});

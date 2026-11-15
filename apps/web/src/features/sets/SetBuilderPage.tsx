@@ -13,15 +13,22 @@ import type { DjSet, components } from "@mixpilot/api-client";
 import { duration, setInput } from "@mixpilot/shared";
 import { useSession } from "../../core/session";
 import { SetExplanation } from "./SetExplanation";
+import { PromptPreview } from "./PromptPreview";
+import { useCapabilities } from "./useCapabilities";
+import { useGenerationJob } from "./useGenerationJob";
+import { ApprovalControls } from "./ApprovalControls";
 import { Artwork, Empty, Failure, Field, Loading } from "../../components/ui";
 type SetTrack = components["schemas"]["SetTrackResponse"];
 type Requirements = components["schemas"]["SetRequirementsRequest"];
+type BuilderForm = ReturnType<typeof setInput.parse> & { mood: string; hasVocals: boolean | null };
 const initial = {
   name: "Evening flow",
   durationMinutes: 60,
   minBpm: 120,
   maxBpm: 126,
   genre: "",
+  mood: "",
+  hasVocals: null,
   territory: "HU",
   energyCurve: "gradualBuild" as const,
 };
@@ -31,8 +38,12 @@ export function SetBuilderPage() {
   const navigate = useNavigate();
   const { api, identity } = useSession();
   const cache = useQueryClient();
-  const [form, setForm] = useState<ReturnType<typeof setInput.parse>>(initial);
+  const [form, setForm] = useState<BuilderForm>(initial);
   const [validation, setValidation] = useState("");
+  const capabilities = useCapabilities();
+  const jobsEnabled = !!capabilities.data?.enabledFeatures?.includes("setGenerationJobs");
+  const promptEnabled = !!capabilities.data?.enabledFeatures?.includes("promptInterpretation");
+  const job = useGenerationJob();
   const result = useQuery({
     queryKey: [identity, "set", id],
     queryFn: ({ signal }) => api.set(id!, signal),
@@ -47,6 +58,8 @@ export function SetBuilderPage() {
         minBpm: r.minBpm ?? 110,
         maxBpm: r.maxBpm ?? 140,
         genre: r.genre ?? "",
+        mood: r.mood ?? "",
+        hasVocals: r.hasVocals ?? null,
         territory: r.territory,
         energyCurve: r.energyCurve ?? "gradualBuild",
       });
@@ -70,6 +83,8 @@ export function SetBuilderPage() {
           minBpm: v.minBpm,
           maxBpm: v.maxBpm,
           genre: v.genre || null,
+          mood: form.mood || null,
+          hasVocals: form.hasVocals,
           territory: v.territory,
           energyCurve: v.energyCurve,
           mode: "planning",
@@ -90,10 +105,22 @@ export function SetBuilderPage() {
     minBpm: form.minBpm,
     maxBpm: form.maxBpm,
     genre: form.genre || null,
+    mood: form.mood || null,
+    hasVocals: form.hasVocals,
     territory: form.territory,
     energyCurve: form.energyCurve,
     mode: "planning",
     excludedTrackIds: [],
+  };
+  const submit = () => {
+    if (!jobsEnabled) { generate.mutate(); return; }
+    const parsed = setInput.safeParse(form);
+    if (!parsed.success) {
+      setValidation(parsed.error.issues.map((issue) => issue.message).join(" "));
+      return;
+    }
+    setValidation("");
+    job.submit({ name: parsed.data.name, requirements });
   };
   return (
     <>
@@ -107,11 +134,25 @@ export function SetBuilderPage() {
         </div>
         <span className="pill">Personal library</span>
       </div>
+      {promptEnabled && <PromptPreview territory={form.territory} onPreview={(preview) => {
+        const r = preview.requirements;
+        if (!r) return;
+        setForm((current) => ({ ...current,
+          durationMinutes: (r.durationSeconds ?? current.durationMinutes * 60) / 60,
+          minBpm: r.minBpm ?? current.minBpm,
+          maxBpm: r.maxBpm ?? current.maxBpm,
+          genre: r.genre ?? "",
+          mood: r.mood ?? "",
+          hasVocals: r.hasVocals ?? null,
+          energyCurve: r.energyCurve ?? current.energyCurve,
+          territory: r.territory,
+        }));
+      }} />}
       <form
         className="builder-controls"
         onSubmit={(e) => {
           e.preventDefault();
-          generate.mutate();
+          submit();
         }}
       >
         <Field label="Set name">
@@ -121,6 +162,18 @@ export function SetBuilderPage() {
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
+        </Field>
+        <Field label="Mood">
+          <input placeholder="Any mood" maxLength={100} value={form.mood}
+            onChange={(e) => setForm({ ...form, mood: e.target.value })} />
+        </Field>
+        <Field label="Vocals">
+          <select value={form.hasVocals == null ? "" : String(form.hasVocals)}
+            onChange={(e) => setForm({ ...form, hasVocals: e.target.value === "" ? null : e.target.value === "true" })}>
+            <option value="">No preference</option>
+            <option value="true">With vocals</option>
+            <option value="false">Instrumental</option>
+          </select>
         </Field>
         <Field label="Genre">
           <input
@@ -196,9 +249,9 @@ export function SetBuilderPage() {
             }
           />
         </Field>
-        <button className="primary" disabled={generate.isPending}>
+        <button className="primary" disabled={generate.isPending || job.isActive}>
           <Sparkles size={17} />
-          {generate.isPending
+          {generate.isPending || job.isActive
             ? "Building your set…"
             : id
               ? "Generate new set"
@@ -215,6 +268,15 @@ export function SetBuilderPage() {
         </p>
       )}
       <Failure error={generate.error} />
+      <Failure error={job.error} />
+      {jobsEnabled && job.job && <section className="explanation" aria-live="polite">
+        <h2>Generation job</h2>
+        <p>Status: {job.job.status ?? "queued"} · Progress: {job.job.progress ?? 0}%</p>
+        {job.failureMessage && <p className="error" role="alert">{job.failureMessage}</p>}
+        {job.timedOut && <p role="status">Still running; check Recent jobs on the dashboard.</p>}
+        {job.notice && <p role="status">{job.notice}</p>}
+        {job.canCancel && !job.timedOut && <button onClick={() => job.cancel()}>Cancel job</button>}
+      </section>}
       <Failure error={result.error} retry={() => void result.refetch()} />
       {id && result.isPending && <Loading />}
       {result.data ? (
@@ -331,6 +393,7 @@ function SetEditor({
               )}{" "}
               · Version {history ?? value.version}
               {changed && history == null ? " · Unsaved changes" : ""}
+              {" · "}{value.status ?? "draft"}{" · Approved version: "}{value.approvedVersion ?? "none"}
             </p>
           </div>
           <select
@@ -345,12 +408,15 @@ function SetEditor({
             <option value="">Latest version</option>
             {versions.data?.map((v) => (
               <option key={v.version} value={v.version}>
-                Version {v.version}
+                Version {v.version} · {v.status ?? "draft"}
               </option>
             ))}
           </select>
         </div>
         <Failure error={versions.error} />
+        <ApprovalControls set={value}
+          version={versions.data?.find((v) => v.version === (history ?? value.version))}
+          disabled={changed || busy} onApproved={accept} reload={reload} />
         <Failure error={historical.error} />
         {history != null && historical.isPending && <Loading />}
         <div className="tabs" role="tablist" aria-label="Set analysis">

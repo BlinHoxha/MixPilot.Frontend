@@ -5,6 +5,12 @@ type Schema = components["schemas"];
 export type Track = Schema["TrackResponse"];
 export type DjSet = Schema["SetResponse"];
 export type Collection = Schema["CollectionResponse"];
+export type SetIntentRequest = Schema["SetIntentRequest"];
+export type SetIntentResponse = Schema["SetIntentResponse"];
+export type CreateSetGenerationJobRequest = Schema["CreateSetGenerationJobRequest"];
+export type SetGenerationJob = Schema["SetGenerationJobResponse"];
+export type SetVersion = Schema["SetVersionResponse"];
+export type SetRequirements = Schema["SetRequirementsRequest"];
 export type TrackWrite = Schema["CreateTrackRequest"];
 type GeneratedTrackQuery = NonNullable<
   paths["/api/v1/tracks"]["get"]["parameters"]["query"]
@@ -40,6 +46,25 @@ export function errorMessage(error: unknown): string {
 }
 export function shouldRetry(failures: number, error: unknown) {
   return failures < 2 && (!(error instanceof ApiError) || error.status >= 500);
+}
+export function intentErrorMessage(code?: string): string {
+  switch (code) {
+    case "prompt_not_interpretable": return "The prompt could not be understood. Try more specific musical details.";
+    case "prompt_interpretation_unavailable": return "Prompt preview is not configured right now.";
+    case "ai_provider_unavailable": return "The AI provider is unavailable. Try again later.";
+    case "ai_provider_timeout": return "The AI provider timed out. Try a shorter prompt.";
+    default: return code ? `Prompt preview failed (${code}).` : "Prompt preview failed. Try again.";
+  }
+}
+export function jobErrorMessage(code?: string | null): string {
+  switch (code) {
+    case "prompt_not_interpretable": return intentErrorMessage(code);
+    case "ai_provider_unavailable": case "ai_provider_timeout": return intentErrorMessage(code);
+    case "no_eligible_tracks": return "No eligible tracks matched these requirements.";
+    case "job_attempts_exhausted": return "This job could not finish after several attempts.";
+    case "track_ineligible": return "A track is no longer eligible for this set.";
+    default: return code ? `Set generation failed (${code}).` : "Set generation failed. Please try again.";
+  }
 }
 
 export function createMixPilotApi(options: {
@@ -162,6 +187,20 @@ export function createMixPilotApi(options: {
       read(client.GET("/api/v1/sets/{id}", { params: path(id), signal })),
     generateSet: (body: Schema["GenerateSetRequest"]) =>
       read(client.POST("/api/v1/sets/generate", { body })),
+    interpretSetIntent: (body: SetIntentRequest, signal?: AbortSignal) =>
+      read(client.POST("/api/v1/set-intents", { body, signal })),
+    createSetGenerationJob: (body: CreateSetGenerationJobRequest, idempotencyKey: string) =>
+      read(client.POST("/api/v1/set-generation-jobs", {
+        body, params: { header: { "Idempotency-Key": idempotencyKey } },
+      })),
+    job: (id: string, signal?: AbortSignal) =>
+      read(client.GET("/api/v1/jobs/{id}", { params: path(id), signal })),
+    jobs: (query: { pageNumber?: number; pageSize?: number } = {}, signal?: AbortSignal) =>
+      read(client.GET("/api/v1/jobs", {
+        params: { query: { PageNumber: query.pageNumber, PageSize: query.pageSize } }, signal,
+      })),
+    cancelJob: (id: string) =>
+      read(client.POST("/api/v1/jobs/{id}/cancel", { params: path(id) })),
     editSet: (id: string, body: Schema["EditSetRequest"]) =>
       read(client.PUT("/api/v1/sets/{id}/tracks", { params: path(id), body })),
     regenerateSet: (id: string, body: Schema["RegenerateSetRequest"]) =>
@@ -179,6 +218,10 @@ export function createMixPilotApi(options: {
           signal,
         }),
       ),
+    approveSetVersion: (id: string, version: number, expectedRevision: number) =>
+      read(client.POST("/api/v1/sets/{id}/versions/{version}/approve", {
+        params: { path: { id, version } }, body: { expectedRevision },
+      })),
     explain: (id: string, question: string) =>
       read(
         client.POST("/api/v1/sets/{id}/explanation", {
