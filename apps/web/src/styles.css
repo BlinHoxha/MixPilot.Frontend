@@ -1154,6 +1154,20 @@ footer {
   margin-top: 24px;
   padding-top: 12px;
 }
+.prompt-preview {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  padding-top: 12px;
+}
+.prompt-preview p,
+.prompt-preview ul,
+.prompt-preview li {
+  font-size: 13px;
+}
+.prompt-preview textarea {
+  min-height: 88px;
+  resize: vertical;
+}
 .explanation h3 {
   display: flex;
   align-items: center;

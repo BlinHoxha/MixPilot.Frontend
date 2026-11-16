@@ -39,7 +39,7 @@ export function PromptPreview({ territory, onPreview }: {
   }
 
   return (
-    <section className="explanation" aria-label="Prompt preview">
+    <section className="prompt-preview" aria-label="Prompt preview">
       <h2>Preview a prompt</h2>
       <form onSubmit={(event) => { event.preventDefault(); void preview(); }}>
         <Field label="Describe your set">

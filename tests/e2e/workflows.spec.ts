@@ -311,8 +311,90 @@ test("prompt preview fills editable fields and a job navigates to its result", a
   await page.getByLabel("Genre").fill("Deep House");
   await page.getByRole("button", { name: "Generate set", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/builder/${resultId}$`));
-  expect(submitted).toMatchObject({ name: "Evening flow", requirements: { genre: "Deep House", mood: "Late", hasVocals: false } });
+  expect(submitted).toMatchObject({ name: "Evening flow", requirements: { genre: "Deep House", mood: "Late", hasVocals: false,
+    durationSeconds: 3600, minBpm: 120, maxBpm: 130 } });
+  const posted = submitted?.requirements as Record<string, unknown>;
+  expect(typeof posted.durationSeconds).toBe("number");
+  expect(typeof posted.minBpm).toBe("number");
   expect(polls).toBeGreaterThanOrEqual(2);
+});
+
+test("prompt preview is hidden when its capability is absent", async ({ page }) => {
+  await page.goto("/builder");
+  await expect(page.getByRole("region", { name: "Prompt preview" })).toHaveCount(0);
+});
+
+test("prompt preview shows a specific client timeout message", async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    const original = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname !== "/api/v1/set-intents") return original(input, init);
+      return new Promise((_resolve, reject) => {
+        request.signal.addEventListener("abort", () => reject(new DOMException("Timed out", "AbortError")), { once: true });
+      });
+    };
+  });
+  await page.route("**/api/v1/capabilities", (route) => route.fulfill({ json: {
+    succeeded: true, data: { enabledFeatures: ["promptInterpretation"] },
+  } }));
+  await page.goto("/builder");
+  await page.getByLabel("Describe your set").fill("A house set");
+  await page.getByRole("button", { name: "Preview prompt" }).click();
+  await expect(page.getByRole("button", { name: "Previewing…" })).toBeVisible();
+  await page.clock.fastForward(150_001);
+  await expect(page.getByRole("alert")).toContainText("The AI model took too long to respond");
+});
+
+test("prompt preview rounds minutes and falls back to synchronous generation", async ({ page }) => {
+  let synchronous = 0;
+  await page.route("**/api/v1/capabilities", (route) => route.fulfill({ json: {
+    succeeded: true, data: { enabledFeatures: ["promptInterpretation"] },
+  } }));
+  await page.route("**/api/v1/set-intents", (route) => route.fulfill({ json: {
+    succeeded: true, data: { requirements: {
+      durationSeconds: 3630, minBpm: 120, maxBpm: 130, territory: "HU", excludedTrackIds: [],
+    }, assumptions: [], unresolved: [] },
+  } }));
+  await page.route("**/api/v1/sets/generate", async (route) => {
+    synchronous++;
+    expect(route.request().postDataJSON().requirements.durationSeconds).toBe(3660);
+    await route.fulfill({ json: { succeeded: true, data: {
+      id: "33333333-3333-4333-8333-333333333333", name: "Evening flow", revision: 1,
+      requirements: { durationSeconds: 3660, territory: "HU", excludedTrackIds: [] }, tracks: [],
+    } } });
+  });
+  await page.goto("/builder");
+  await page.getByLabel("Describe your set").fill("A house set");
+  await page.getByRole("button", { name: "Preview prompt" }).click();
+  await expect(page.getByLabel("Duration (minutes)")).toHaveValue("61");
+  await page.getByRole("button", { name: "Generate set", exact: true }).click();
+  await expect(page).toHaveURL(/\/builder\//);
+  expect(synchronous).toBe(1);
+});
+
+test("job polling stops at its five minute cap", async ({ page }) => {
+  await page.clock.install();
+  await page.route("**/api/v1/capabilities", (route) => route.fulfill({ json: {
+    succeeded: true, data: { enabledFeatures: ["setGenerationJobs"] },
+  } }));
+  await page.route("**/api/v1/set-generation-jobs", (route) => route.fulfill({ status: 202, json: {
+    succeeded: true, data: { id: "job-cap", status: "queued" },
+  } }));
+  let polls = 0;
+  await page.route("**/api/v1/jobs/job-cap", (route) => {
+    polls++;
+    return route.fulfill({ json: { succeeded: true, data: { id: "job-cap", status: "running", progress: 25 } } });
+  });
+  await page.goto("/builder");
+  await page.getByRole("button", { name: "Generate set", exact: true }).click();
+  await expect(page.getByText("Status: running", { exact: false })).toBeVisible();
+  await page.clock.fastForward(300_001);
+  await expect(page.getByText("Still running; check Recent jobs on the dashboard.")).toBeVisible();
+  const stoppedAt = polls;
+  await page.clock.fastForward(10_000);
+  expect(polls).toBe(stoppedAt);
 });
 
 test("a failed job shows its code and a running job can be cancelled", async ({ page }) => {
@@ -379,4 +461,33 @@ test("dashboard shows recent job status and a result link", async ({ page }) => 
   await expect(panel).toContainText("succeeded");
   await expect(panel).toContainText("100%");
   await expect(panel.getByRole("link", { name: "Open set" })).toHaveAttribute("href", "/builder/33333333-3333-4333-8333-333333333333");
+});
+
+test("recent jobs refreshes after a generated job succeeds", async ({ page }) => {
+  await page.route("**/api/v1/capabilities", (route) => route.fulfill({ json: {
+    succeeded: true, data: { enabledFeatures: ["setGenerationJobs"] },
+  } }));
+  let completed = false;
+  await page.route("**/api/v1/jobs?*", (route) => route.fulfill({ json: { succeeded: true, data: {
+    items: [{ id: "job-1", status: completed ? "succeeded" : "queued", progress: completed ? 100 : 0,
+      createdAt: "2026-11-15T10:00:00Z", resultSetId: completed ? "33333333-3333-4333-8333-333333333333" : null }],
+    pageNumber: 1, pageSize: 10, totalCount: 1, totalPages: 1,
+  } } }));
+  await page.route("**/api/v1/set-generation-jobs", (route) => route.fulfill({ status: 202, json: {
+    succeeded: true, data: { id: "job-1", status: "queued", progress: 0 },
+  } }));
+  await page.route("**/api/v1/jobs/job-1", (route) => {
+    completed = true;
+    return route.fulfill({ json: { succeeded: true, data: {
+      id: "job-1", status: "succeeded", progress: 100,
+      resultSetId: "33333333-3333-4333-8333-333333333333",
+    } } });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "Recent jobs" })).toContainText("queued");
+  await page.getByRole("link", { name: "Set Builder" }).click();
+  await page.getByRole("button", { name: "Generate set", exact: true }).click();
+  await expect(page).toHaveURL(/\/builder\//);
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(page.getByRole("region", { name: "Recent jobs" })).toContainText("succeeded");
 });

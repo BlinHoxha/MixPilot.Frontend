@@ -98,6 +98,29 @@ describe("shared API transport", () => {
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
+  it("uses 150 seconds for intent preview and 30 seconds for other calls", async () => {
+    vi.useFakeTimers();
+    try {
+      const transport: typeof fetch = async (input) =>
+        new Promise((_resolve, reject) => {
+          (input as Request).signal.addEventListener("abort", () =>
+            reject(new DOMException("Timed out", "AbortError")), { once: true });
+        });
+      const api = createMixPilotApi({ baseUrl: "https://api.example.test", fetch: transport });
+      const preview = api.interpretSetIntent({ prompt: "House", territory: "HU" });
+      const tracks = api.tracks();
+      const trackOutcome = tracks.catch((error: unknown) => error);
+      const previewOutcome = preview.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(await trackOutcome).toMatchObject({ code: "client_timeout" });
+      let settled = false;
+      void previewOutcome.then(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await previewOutcome).toMatchObject({ code: "client_timeout" });
+    } finally { vi.useRealTimers(); }
+  });
   it("rejects a malformed success envelope", async () => {
     const api = createMixPilotApi({
       baseUrl: "https://api.example.test",

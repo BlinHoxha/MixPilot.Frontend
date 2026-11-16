@@ -53,6 +53,7 @@ export function intentErrorMessage(code?: string): string {
     case "prompt_interpretation_unavailable": return "Prompt preview is not configured right now.";
     case "ai_provider_unavailable": return "The AI provider is unavailable. Try again later.";
     case "ai_provider_timeout": return "The AI provider timed out. Try a shorter prompt.";
+    case "client_timeout": return "The AI model took too long to respond. Try again, or use a smaller model.";
     default: return code ? `Prompt preview failed (${code}).` : "Prompt preview failed. Try again.";
   }
 }
@@ -72,19 +73,27 @@ export function createMixPilotApi(options: {
   getAccessToken?: () => Promise<string | undefined>;
   fetch?: typeof fetch;
   timeoutMs?: number;
+  intentTimeoutMs?: number;
   onUnauthorized?: () => void;
 }) {
   const transport: typeof fetch = async (input, init) => {
     const request = new Request(input, init);
     const controller = new AbortController();
+    let timedOut = false;
     const abort = () => controller.abort();
     if (request.signal.aborted) abort();
     request.signal.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(abort, options.timeoutMs ?? 30000);
+    const intent = new URL(request.url).pathname === "/api/v1/set-intents";
+    const timer = setTimeout(() => { timedOut = true; abort(); },
+      intent ? options.intentTimeoutMs ?? 150000 : options.timeoutMs ?? 30000);
     try {
       return await (options.fetch ?? fetch)(
         new Request(request, { signal: controller.signal }),
       );
+    } catch (error) {
+      if (timedOut && !request.signal.aborted)
+        throw new ApiError(0, "The request timed out.", "client_timeout");
+      throw error;
     } finally {
       clearTimeout(timer);
       request.signal.removeEventListener("abort", abort);

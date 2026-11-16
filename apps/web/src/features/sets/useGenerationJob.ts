@@ -47,6 +47,10 @@ export function useGenerationJob() {
     return () => window.clearTimeout(timer);
   }, [id, startedAt, timedOut, query.data?.status]);
   useEffect(() => {
+    if (terminal(query.data?.status))
+      void cache.invalidateQueries({ queryKey: [identity, "jobs"] });
+  }, [query.data?.status, cache, identity]);
+  useEffect(() => {
     if (query.data?.status !== "succeeded" || !query.data.resultSetId) return;
     void cache.invalidateQueries({ queryKey: [identity, "sets"] });
     navigate(`/builder/${query.data.resultSetId}`);

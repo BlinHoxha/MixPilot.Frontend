@@ -120,7 +120,20 @@ export function SetBuilderPage() {
       return;
     }
     setValidation("");
-    job.submit({ name: parsed.data.name, requirements });
+    const v = parsed.data;
+    const requirements: Requirements = {
+      durationSeconds: v.durationMinutes * 60,
+      minBpm: v.minBpm,
+      maxBpm: v.maxBpm,
+      genre: v.genre || null,
+      mood: form.mood || null,
+      hasVocals: form.hasVocals,
+      territory: v.territory,
+      energyCurve: v.energyCurve,
+      mode: "planning",
+      excludedTrackIds: [],
+    };
+    job.submit({ name: v.name, requirements });
   };
   return (
     <>
@@ -138,7 +151,7 @@ export function SetBuilderPage() {
         const r = preview.requirements;
         if (!r) return;
         setForm((current) => ({ ...current,
-          durationMinutes: (r.durationSeconds ?? current.durationMinutes * 60) / 60,
+          durationMinutes: Math.round((r.durationSeconds ?? current.durationMinutes * 60) / 60),
           minBpm: r.minBpm ?? current.minBpm,
           maxBpm: r.maxBpm ?? current.maxBpm,
           genre: r.genre ?? "",
