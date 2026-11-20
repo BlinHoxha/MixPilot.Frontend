@@ -36,7 +36,7 @@ export function errorMessage(error: unknown): string {
     if (error.status === 401) return "Your session has expired. Sign in again.";
     if (error.status === 403)
       return "You do not have permission to perform this action.";
-    if (error.status === 409)
+    if (error.status === 409 && error.code === "revision_conflict")
       return `${error.message} Reload the latest data before trying again.`;
     return error.message;
   }
@@ -181,10 +181,17 @@ export function createMixPilotApi(options: {
           signal,
         }),
       ),
+    collection: (id: string, signal?: AbortSignal) =>
+      read(client.GET("/api/v1/collections/{id}", { params: path(id), signal })),
     createCollection: (body: Schema["SaveCollectionRequest"]) =>
       read(client.POST("/api/v1/collections", { body })),
     updateCollection: (id: string, body: Schema["SaveCollectionRequest"]) =>
       read(client.PUT("/api/v1/collections/{id}", { params: path(id), body })),
+    deleteCollection: async (id: string, expectedRevision: number) => {
+      await client.DELETE("/api/v1/collections/{id}", {
+        params: { ...path(id), query: { expectedRevision } },
+      });
+    },
     sets: (pageNumber = 1, signal?: AbortSignal) =>
       read(
         client.GET("/api/v1/sets", {

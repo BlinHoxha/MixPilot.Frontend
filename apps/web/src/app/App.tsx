@@ -21,6 +21,7 @@ import {
 import { useSession } from "../core/session";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { SetBuilderPage } from "../features/sets/SetBuilderPage";
+import { PlaylistDetailPage } from "../features/workspace/PlaylistDetailPage";
 import {
   DashboardPage,
   PlaylistsPage,
@@ -119,6 +120,7 @@ function Shell() {
               <Route path="/builder/:id" element={<SetBuilderPage />} />
               <Route path="/sets" element={<SavedSetsPage />} />
               <Route path="/playlists" element={<PlaylistsPage />} />
+              <Route path="/playlists/:id" element={<PlaylistDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route
                 path="/discover"

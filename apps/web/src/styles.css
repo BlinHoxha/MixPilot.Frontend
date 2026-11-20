@@ -875,6 +875,9 @@ dialog .large {
 .playlist-tracks span {
   color: var(--muted);
 }
+.playlist-detail-tracks { padding-left: 20px; }
+.playlist-detail-row { margin: 12px 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.playlist-detail-row .row-actions { display: flex; gap: 8px; margin-top: 8px; }
 footer {
   padding: 20px 36px;
   border-top: 1px solid #1b2537;

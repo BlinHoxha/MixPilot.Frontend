@@ -9,11 +9,9 @@ import {
   Failure,
   Field,
   Loading,
-  Modal,
   Pagination,
 } from "../../components/ui";
 import { ApiError } from "@mixpilot/api-client";
-import type { Collection } from "@mixpilot/api-client";
 import { RecentJobs } from "./RecentJobs";
 
 export function DashboardPage() {
@@ -165,7 +163,6 @@ export function SavedSetsPage() {
 export function PlaylistsPage() {
   const { api, identity } = useSession();
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Collection>();
   const query = useQuery({
     queryKey: [identity, "collections", page],
     queryFn: ({ signal }) => api.collections(page, signal),
@@ -188,15 +185,15 @@ export function PlaylistsPage() {
       ) : query.data?.items?.length ? (
         <div className="card-grid">
           {query.data.items.map((item) => (
-            <button
+            <Link
               className="quick-card"
               key={item.id}
-              onClick={() => setSelected(item)}
+              to={`/playlists/${item.id}`}
             >
               <ListMusic />
               <h2>{item.name}</h2>
               <p>{item.trackIds?.length ?? 0} tracks</p>
-            </button>
+            </Link>
           ))}
         </div>
       ) : (
@@ -211,43 +208,9 @@ export function PlaylistsPage() {
         pages={query.data?.totalPages ?? 1}
         change={setPage}
       />
-      {selected && (
-        <Modal
-          title={selected.name ?? "Playlist"}
-          close={() => setSelected(undefined)}
-        >
-          <ol className="playlist-tracks">
-            {selected.trackIds?.map((id) => (
-              <PlaylistTrack key={id} id={id} />
-            ))}
-          </ol>
-        </Modal>
-      )}
     </>
   );
 }
-function PlaylistTrack({ id }: { id: string }) {
-  const { api, identity } = useSession();
-  const query = useQuery({
-    queryKey: [identity, "track", id],
-    queryFn: ({ signal }) => api.track(id, signal),
-  });
-  return (
-    <li>
-      {query.isPending ? (
-        "Loading track…"
-      ) : query.error ? (
-        <Failure error={query.error} />
-      ) : (
-        <>
-          <strong>{query.data?.title}</strong>
-          <span> — {query.data?.artist}</span>
-        </>
-      )}
-    </li>
-  );
-}
-
 export function SettingsPage() {
   const { api, identity } = useSession();
   const cache = useQueryClient();

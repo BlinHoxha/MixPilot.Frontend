@@ -14,7 +14,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Setup.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Run.ps1 dev
 ```
 
-Open **http://localhost:5173**. The web app connects to **http://localhost:5290** by default. Start PostgreSQL, apply MixPilot's migrations and start `MixPilot.Api` using the backend README. This frontend does not start or configure your database.
+Open **http://localhost:5173** or **http://127.0.0.1:5173**. The web app connects to **http://localhost:5290** by default. Start PostgreSQL, apply MixPilot's migrations and start `MixPilot.Api` using the backend README. This frontend does not start or configure your database.
 
 Setup creates ignored `apps/web/.env.local` and `apps/mobile/.env.local` from their examples, only if missing. Local development identity requires both the frontend opt-in and the backend's `Development` identity. Production web builds always ignore the development identity flag.
 
@@ -24,7 +24,7 @@ With Node 22.12+ and pnpm 10.32.1 already installed, use `pnpm install --frozen-
 
 - Responsive dark workstation based on the supplied template: home, library, set builder, saved sets, playlists and preferences.
 - Library: paginated search, genre filter, sorting, metadata registration/edit/delete, detail view and authorized CSV metadata import. Blank BPM/key/energy values stay unknown.
-- Playlists: create an ordered collection from selected library tracks and view its members.
+- Playlists: create an ordered collection from selected library tracks, then rename it, reorder or remove tracks, and delete it from the playlist detail page.
 - Set builder: structured constraints, capability-gated prompt preview, durable generation jobs with progress and cancellation, saved plans, add/remove/reorder tracks, lock/unlock, save revisions, approve versions, regenerate unlocked tracks, view history, and BPM/key/energy metadata charts.
 - Dashboard: recent set-generation jobs with status and result links.
 - Set explanations through MixPilot's existing Framework-backed endpoint, when advertised by capabilities.

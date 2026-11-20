@@ -22,7 +22,7 @@ const output = astToString(
 );
 const destination = path.join(root, "packages/api-client/src/generated.ts");
 if (process.argv.includes("--check")) {
-  if ((await fs.readFile(destination, "utf8")) !== output)
+  if ((await fs.readFile(destination, "utf8")).replace(/\r\n/g, "\n") !== output.replace(/\r\n/g, "\n"))
     throw Error("Generated contracts are stale. Run pnpm contracts:generate.");
   console.log("OpenAPI contracts match.");
 } else {

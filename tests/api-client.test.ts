@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   createMixPilotApi,
+  errorMessage,
   intentErrorMessage,
   jobErrorMessage,
   shouldRetry,
@@ -12,6 +13,31 @@ const json = (body: unknown, status = 200) =>
     headers: { "Content-Type": "application/json" },
   });
 describe("shared API transport", () => {
+  it("gives reload guidance only for revision conflicts", () => {
+    expect(errorMessage(new ApiError(409, "Changed.", "revision_conflict")))
+      .toBe("Changed. Reload the latest data before trying again.");
+    expect(errorMessage(new ApiError(409, "Remove this track from its collections.", "resource_in_use")))
+      .toBe("Remove this track from its collections.");
+    expect(errorMessage(new ApiError(409, "Conflict.", "resource_conflict")))
+      .toBe("Conflict.");
+  });
+  it("reads and deletes a collection with its current revision", async () => {
+    const transport = vi.fn<typeof fetch>(async (input) => {
+      const request = input as Request;
+      const url = new URL(request.url);
+      expect(url.pathname).toBe("/api/v1/collections/collection-1");
+      if (request.method === "DELETE") {
+        expect(url.searchParams.get("expectedRevision")).toBe("3");
+        return new Response(null, { status: 204 });
+      }
+      expect(request.method).toBe("GET");
+      return json({ succeeded: true, data: { id: "collection-1", name: "Warm-up", revision: 3, trackIds: [] } });
+    });
+    const api = createMixPilotApi({ baseUrl: "https://api.example.test", fetch: transport });
+    expect((await api.collection("collection-1")).name).toBe("Warm-up");
+    await expect(api.deleteCollection("collection-1", 3)).resolves.toBeUndefined();
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
   it("uses generated query parameters, bearer authentication and unwraps paginated responses", async () => {
     const transport = vi.fn<typeof fetch>(async (input) => {
       const request = input as Request;

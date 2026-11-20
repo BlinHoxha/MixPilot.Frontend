@@ -286,7 +286,7 @@ export function LibraryPage() {
                 <Failure
                   error={remove.error}
                   retry={
-                    remove.error
+                    remove.error && !(remove.error instanceof ApiError && remove.error.code === "resource_in_use")
                       ? () => {
                           void track.refetch();
                           remove.reset();

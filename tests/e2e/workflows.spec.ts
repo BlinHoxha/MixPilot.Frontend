@@ -192,6 +192,60 @@ test("library search, detail, metadata creation and collection selection", async
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+test("playlist detail renames, reorders, removes and deletes without blocking library removal", async ({ page }) => {
+  const playlistId = "55555555-5555-4555-8555-555555555555";
+  let playlist: { id: string; name: string; revision: number; trackIds: string[] } | null = {
+    id: playlistId, name: "Warm-up", revision: 1, trackIds: [track.id, second.id],
+  };
+  let libraryDelete = false;
+  await page.route("**/api/v1/collections**", (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const ok = (data: unknown) => route.fulfill({ json: { succeeded: true, data } });
+    if (url.pathname === "/api/v1/collections") return ok({
+      items: playlist ? [playlist] : [], pageNumber: 1, pageSize: 20,
+      totalCount: playlist ? 1 : 0, totalPages: 1,
+    });
+    if (request.method() === "GET") return ok(playlist);
+    expect(playlist).not.toBeNull();
+    if (request.method() === "PUT") {
+      const body = request.postDataJSON();
+      expect(body.expectedRevision).toBe(playlist!.revision);
+      playlist = { ...playlist!, name: body.name, trackIds: body.trackIds, revision: playlist!.revision + 1 };
+      return ok(playlist);
+    }
+    expect(url.searchParams.get("expectedRevision")).toBe(String(playlist!.revision));
+    playlist = null;
+    return route.fulfill({ status: 204 });
+  });
+  await page.route(`**/api/v1/tracks/${track.id}**`, (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback();
+    expect(playlist?.trackIds.includes(track.id)).toBe(false);
+    libraryDelete = true;
+    return route.fulfill({ status: 204 });
+  });
+  await page.goto("/playlists");
+  await page.getByRole("link", { name: /Warm-up/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/playlists/${playlistId}$`));
+  await expect(page.getByText("Lost in Motion — KLTR")).toBeVisible();
+  await page.getByLabel("Playlist name").fill("Evening picks");
+  await page.getByRole("button", { name: "Rename playlist" }).click();
+  await expect(page.getByRole("heading", { name: "Evening picks" })).toBeVisible();
+  await page.getByRole("button", { name: "Move Lost in Motion down" }).click();
+  await expect.poll(() => playlist?.trackIds[0]).toBe(second.id);
+  await page.getByRole("button", { name: "Remove Lost in Motion from playlist" }).click();
+  await expect.poll(() => playlist?.trackIds).toEqual([second.id]);
+  await page.goto("/library");
+  await page.getByRole("button", { name: "Lost in Motion KLTR" }).click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Remove track" }).click();
+  await expect.poll(() => libraryDelete).toBe(true);
+  await page.goto(`/playlists/${playlistId}`);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Delete playlist" }).click();
+  await expect(page).toHaveURL(/\/playlists$/);
+  await expect(page.getByText("A place for every mood")).toBeVisible();
+});
 test("CSV import reports the actual result", async ({ page }) => {
   await page.goto("/library");
   await page.getByRole("button", { name: "Import CSV" }).click();
@@ -448,6 +502,11 @@ test("version approval handles an ineligible track then shows approved status", 
 });
 
 test("dashboard shows recent job status and a result link", async ({ page }) => {
+  let setRequests = 0;
+  await page.route("**/api/v1/sets/33333333-3333-4333-8333-333333333333", (route) => {
+    setRequests++;
+    return route.fallback();
+  });
   await page.route("**/api/v1/capabilities", (route) => route.fulfill({ json: {
     succeeded: true, data: { enabledFeatures: ["setGenerationJobs"] },
   } }));
@@ -460,7 +519,9 @@ test("dashboard shows recent job status and a result link", async ({ page }) => 
   const panel = page.getByRole("region", { name: "Recent jobs" });
   await expect(panel).toContainText("succeeded");
   await expect(panel).toContainText("100%");
+  await expect(panel).toContainText(/100%.*Evening flow.*Open set/);
   await expect(panel.getByRole("link", { name: "Open set" })).toHaveAttribute("href", "/builder/33333333-3333-4333-8333-333333333333");
+  expect(setRequests).toBe(1);
 });
 
 test("recent jobs refreshes after a generated job succeeds", async ({ page }) => {
